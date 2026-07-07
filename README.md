@@ -5,10 +5,10 @@
 ## 运行
 
 ```sh
-cd ~/Desktop/_SalaryTrain
-swift run -c release                          # 默认模式（outline 边缘线稿）
-swift run -c release -- --bw-edge             # 斜线勾边猫（推荐）
+cd ~/Desktop/Terminal-Animate-main
+swift run -c release                          # 默认模式（bw-edge 斜线勾边猫）
 swift run -c release -- --filled              # 全彩填充
+swift run -c release -- --outline             # Sobel+NMS 边缘线稿
 swift run -c release -- --bw                  # 取模黑白剪影
 swift run -c release -- --bw --dither         # Floyd-Steinberg 抖动黑白
 ```
@@ -19,11 +19,11 @@ swift run -c release -- --bw --dither         # Floyd-Steinberg 抖动黑白
 
 | 模式 | 旗标 | 效果 | 默认阈值 |
 |------|------|------|---------|
-| outline | — | Sobel+NMS 边缘线稿，原色 | edgeThreshold=60 |
+| bw-edge | `--bw-edge` （默认） | 斜线勾边猫（`/\|-` 画轮廓，眼睛实心，去花纹） | edgeThreshold=200, stripeThreshold=120 |
+| outline | `--outline` | Sobel+NMS 边缘线稿，原色 | edgeThreshold=60 |
 | filled | `--filled` | 全彩填充 | — |
 | bw | `--bw` | 取模黑白白色剪影 | bwThreshold=128 |
 | bw-dither | `--bw --dither` | Floyd-Steinberg 抖动黑白 | bwThreshold=128 |
-| bw-edge | `--bw-edge` | 斜线勾边猫（`/\|-` 画轮廓，眼睛实心，去花纹） | edgeThreshold=200, stripeThreshold=250 |
 
 ### 阈值调整
 
@@ -44,7 +44,7 @@ swift run -c release -- --bw --dither         # Floyd-Steinberg 抖动黑白
 ## 项目结构
 
 ```
-_SalaryTrain/
+Terminal-Animate-main/
 ├── Package.swift                 # SPM 包定义（库+可执行体+测试）
 ├── CONTEXT.md                    # 项目领域词汇表
 ├── Sources/
@@ -56,13 +56,12 @@ _SalaryTrain/
 │   │   └── TerminalSize.swift    # 终端尺寸结构体
 │   ├── SalaryTrain/              # I/O 可执行体
 │   │   ├── main.swift            # CLI 解析 + 编排入口
-│   │   ├── Stage.swift           # 终端控制（alt screen, 160×48 固定尺寸, diff draw）
-│   │   ├── Show.swift            # 演出主循环（火车→猫）
+│   │   ├── Stage.swift           # 终端控制（alt screen, 240×40 固定尺寸, diff draw, 窗口居中）
+│   │   ├── Show.swift            # 演出主循环（火车→猫，猫预渲染）
 │   │   ├── Act.swift             # Act 协议
 │   │   ├── TrainAct.swift        # 火车动画（sl 节奏, 40ms/帧）
-│   │   ├── CatAct.swift          # 猫动画（预渲染帧循环）
-│   │   ├── AssetPath.swift       # GIF 路径解析
-│   │   └── cat.gif               # 月薪喵 GIF（28 帧, 240×240）
+│   │   ├── CatAct.swift          # 猫动画（后台预渲染 + 插值 + 编码）
+│   │   └── AssetPath.swift       # GIF 路径解析
 │   └── SalaryTrainTests/         # 12 个行为测试
 │       ├── FrameRendererTests.swift
 │       └── OverlayTests.swift
@@ -82,7 +81,10 @@ GIF 文件
     ├─ .bw:       亮度阈值化 → 白色剪影
     ├─ .bwDither: Floyd-Steinberg 抖动黑白
     └─ .bwEdge:   detectEyeMask → binarizeAlpha → Sobel+NMS → filterStripeEdges → fillEyes
-[UInt8] RGBA 像素缓冲
+[UInt8] RGBA 像素缓冲（边缘/处理过）
+  ↓ FrameRenderer.interpolatePixelBuffers
+    线性 RGBA 插值（边缘模式用阈值二值化，消除鬼影）
+[(pixels, width, height)]
   ↓ FrameRenderer.encodeLines / encodeSlashLines
 [String] ANSI 终端行
   ↓ Stage.draw（差量重绘 + Quit 提示）
@@ -110,7 +112,7 @@ GIF 文件
 
 ## 终端技术
 
-- **窗口调整**：`\x1b[8;48;160t` xterm resize 序列，固定 160×48 渲染
+- **窗口调整**：`\x1b[8;40;240t` xterm resize 序列，固定 240×40 渲染
 - **半块字符**：`\u{2580}`（▀）上半块，`\u{2584}`（▄）下半块，2 像素/终端行
 - **真彩色**：`\u{1b}[38;2;R;G;Bm` 前景色，`\u{1b}[48;2;R;G;Bm` 背景色
 - **差量重绘**：缓存上一帧，只写变化行，避免闪烁

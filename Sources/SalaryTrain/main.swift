@@ -39,7 +39,7 @@ enum Mode {
 
 /// 月薪喵动画预设参数表（旗标解析后合成一份 RenderParams）。
 let presetTable = """
-月薪喵动画预设参数表（默认模式 bw-edge，插帧 2x）：
+月薪喵动画预设参数表（默认模式 bw-edge，插帧 1x）：
   bw-edge   (默认) 斜线勾边猫,  --bw-edge  --edge-threshold 200
   outline           Sobel+NMS 边缘线稿,  --outline  --edge-threshold 60
   filled            全彩填充,            --filled
@@ -115,7 +115,7 @@ func parseArgs() -> CLIOptions {
             print("--edge-threshold  Sobel 边缘阈值（outline 默认 60, bw-edge 默认 200，越小边缘越多）")
             print("--stripe-threshold 花纹抑制阈值（bw-edge 默认 120，越小去花纹越多）")
             print("--bw-threshold    黑白亮度阈值，默认 128（越小白色越多）")
-            print("默认模式 bw-edge（斜线勾边猫，插帧 2x）。")
+            print("默认模式 bw-edge（斜线勾边猫，插帧 1x）。")
             print("Ctrl+C 退出。")
             exit(0)
         default:
@@ -170,7 +170,7 @@ case .dumpFrame:
     var frames = GifLoader.loadGif(at: url)
     frames = GifLoader.trim(frames)
     guard let first = frames.first else { fputs("no frames\n", stderr); exit(1) }
-    let term = TerminalSize(columns: 160, rows: 48)
+    let term = TerminalSize(columns: 240, rows: 40)
     let src = (first.image.width, first.image.height)
     let target = FrameRenderer.fitSize(source: src, terminal: term, reservedRows: term.rows / 2, verticalPixelsPerRow: 2)
     let resized = FrameRenderer.resize(first.image, to: target)
