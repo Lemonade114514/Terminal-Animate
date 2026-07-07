@@ -33,16 +33,17 @@ public struct RenderParams {
     public var mode: RenderMode
     public var edgeThreshold: Int
     public var bwThreshold: Int
+    public var stripeThreshold: Int  // bwEdge: 亮度差低于此值的边缘被抑制（去花纹）
 
-    public init(mode: RenderMode, edgeThreshold: Int, bwThreshold: Int) {
-        self.mode = mode; self.edgeThreshold = edgeThreshold; self.bwThreshold = bwThreshold
+    public init(mode: RenderMode, edgeThreshold: Int, bwThreshold: Int, stripeThreshold: Int = 30) {
+        self.mode = mode; self.edgeThreshold = edgeThreshold; self.bwThreshold = bwThreshold; self.stripeThreshold = stripeThreshold
     }
 
     public static let outline   = RenderParams(mode: .outline,   edgeThreshold: 60,  bwThreshold: 0)
     public static let filled    = RenderParams(mode: .filled,    edgeThreshold: 0,   bwThreshold: 0)
     public static let bw        = RenderParams(mode: .bw,        edgeThreshold: 0,   bwThreshold: 128)
     public static let bwDither  = RenderParams(mode: .bwDither,  edgeThreshold: 0,   bwThreshold: 128)
-    public static let bwEdge    = RenderParams(mode: .bwEdge,    edgeThreshold: 200, bwThreshold: 0)
+    public static let bwEdge    = RenderParams(mode: .bwEdge,    edgeThreshold: 200, bwThreshold: 0, stripeThreshold: 100)
 }
 
 public enum FrameRenderer {
@@ -117,8 +118,12 @@ public enum FrameRenderer {
         case .bwDither:
             applyBlackWhiteDither(pixels: &pixels, width: w, height: h, threshold: params.bwThreshold)
         case .bwEdge:
+            let eyeMask = detectEyeMask(pixels: pixels, width: w, height: h)
+            let lumMap = computeLuminanceMap(pixels: pixels, width: w, height: h)
             binarizeAlpha(pixels: &pixels, width: w, height: h, alphaThreshold: 128)
             applySobelEdges(pixels: &pixels, width: w, height: h, threshold: params.edgeThreshold, storeDirection: true)
+            filterStripeEdges(pixels: &pixels, width: w, height: h, lumMap: lumMap, stripeThreshold: params.stripeThreshold)
+            fillEyes(pixels: &pixels, width: w, height: h, eyeMask: eyeMask)
         case .filled:
             break
         }
@@ -209,12 +214,15 @@ public enum FrameRenderer {
     /// 斜线编码 seam：2 像素 = 1 终端格（和半块模式一致）。
     /// 按 R 通道存储的方向码画 /\|- 字符。
     /// 方向码：0=|(竖边), 1=/(斜边), 2=-(横边), 3=\(反斜边)。
-    /// 对每对像素行 (y, y+1)，检查两行：任一行有边缘 → 用该像素方向码画斜线；都有 → 取顶部。
+    /// R=255 表示实心填充像素（眼睛），画半块实心字符（▀/▄/█）。
+    /// 对每对像素行 (y, y+1)，检查两行：
+    /// - 任一行有眼睛填充 → 画实心块
+    /// - 否则任一行有边缘 → 用该像素方向码画斜线；都有 → 取顶部
     public static func encodeSlashLines(pixels: [UInt8], width: Int, height: Int) -> [String] {
         let w = width
         let h = height
         let bpp = 4
-        let chars = ["|", "/", "-", "\\"]
+        let slashChars = ["|", "/", "-", "\\"]
         let whiteFG = "\u{1b}[38;2;255;255;255m"
         var lines: [String] = []
         var y = 0
@@ -223,18 +231,36 @@ public enum FrameRenderer {
             for x in 0..<w {
                 let topI = (y * w + x) * bpp
                 let topA = Int(pixels[topI + 3])
+                let topR = Int(pixels[topI])
                 let botI = y + 1 < h ? ((y + 1) * w + x) * bpp : topI
                 let botA = y + 1 < h ? Int(pixels[botI + 3]) : 0
+                let botR = y + 1 < h ? Int(pixels[botI]) : 0
+
+                let topEye = topA >= 200 && topR == 255
+                let botEye = botA >= 200 && botR == 255
+                let topEdge = topA >= 200 && topR < 4
+                let botEdge = botA >= 200 && botR < 4
 
                 var ch = " "
-                if topA >= 200 || botA >= 200 {
-                    let dirCode: Int
-                    if topA >= 200 {
-                        dirCode = Int(pixels[topI]) // prefer top pixel
+                if topEye || botEye {
+                    // 眼睛实心块：上下都填充→█，仅上→▀，仅下→▄
+                    if topEye && botEye {
+                        ch = "\u{2588}" // █
+                    } else if topEye {
+                        ch = "\u{2580}" // ▀
                     } else {
-                        dirCode = Int(pixels[botI]) // only bottom has edge
+                        ch = "\u{2584}" // ▄
                     }
-                    ch = chars[dirCode]
+                    parts.append(whiteFG)
+                } else if topEdge || botEdge {
+                    // 斜线边缘
+                    let dirCode: Int
+                    if topEdge {
+                        dirCode = Int(pixels[topI])
+                    } else {
+                        dirCode = Int(pixels[botI])
+                    }
+                    ch = slashChars[dirCode]
                     parts.append(whiteFG)
                 }
                 parts.append(ch)
@@ -453,6 +479,98 @@ public enum FrameRenderer {
                     pixels[i + 1] = 0
                     pixels[i + 2] = 0
                     pixels[i + 3] = 0
+                }
+            }
+        }
+    }
+
+    // MARK: - bwEdge: 眼睛检测、花纹过滤、眼睛填充
+
+    /// 计算原始像素的亮度图（alpha 加权），用于花纹过滤。
+    private static func computeLuminanceMap(pixels: [UInt8], width: Int, height: Int) -> [Int] {
+        let bpp = 4
+        var lum = [Int](repeating: 0, count: width * height)
+        for y in 0..<height {
+            for x in 0..<width {
+                let i = (y * width + x) * bpp
+                let r = Int(pixels[i])
+                let g = Int(pixels[i + 1])
+                let b = Int(pixels[i + 2])
+                let a = Int(pixels[i + 3])
+                lum[y * width + x] = (a * (299 * r + 587 * g + 114 * b)) / 255 / 1000
+            }
+        }
+        return lum
+    }
+
+    /// 检测眼睛像素（蓝色：B > R+30 && B > G+10 && alpha > 128）。
+    /// 返回与像素缓冲等长的 Bool 数组，true = 该像素属于眼睛区域。
+    private static func detectEyeMask(pixels: [UInt8], width: Int, height: Int) -> [Bool] {
+        let bpp = 4
+        var mask = [Bool](repeating: false, count: width * height)
+        for y in 0..<height {
+            for x in 0..<width {
+                let i = (y * width + x) * bpp
+                let r = Int(pixels[i])
+                let g = Int(pixels[i + 1])
+                let b = Int(pixels[i + 2])
+                let a = Int(pixels[i + 3])
+                if a > 128 && b > r + 30 && b > g + 10 {
+                    mask[y * width + x] = true
+                }
+            }
+        }
+        return mask
+    }
+
+    /// 抑制亮度差低于 stripeThreshold 且两侧都是不透明像素的边缘（色块边界/花纹）。
+    /// 轮廓边缘（一侧透明）和眼睛边缘（亮度差大）保留。
+    private static func filterStripeEdges(pixels: inout [UInt8], width: Int, height: Int, lumMap: [Int], stripeThreshold: Int) {
+        let bpp = 4
+        for y in 0..<height {
+            for x in 0..<width {
+                let i = (y * width + x) * bpp
+                guard pixels[i + 3] >= 200 else { continue } // 只检查边缘像素
+                let dirCode = Int(pixels[i])
+                // 根据方向码确定采样偏移 (dx, dy)
+                let (dx, dy): (Int, Int)
+                switch dirCode {
+                case 0:  dx = 1; dy = 0   // 水平梯度 → 比较左右
+                case 2:  dx = 0; dy = 1   // 竖直梯度 → 比较上下
+                case 1:  dx = 1; dy = 1   // 45° → 比较对角
+                default: dx = 1; dy = -1   // 135° → 比较反对角
+                }
+                let x1 = max(0, min(width - 1, x - dx))
+                let y1 = max(0, min(height - 1, y - dy))
+                let x2 = max(0, min(width - 1, x + dx))
+                let y2 = max(0, min(height - 1, y + dy))
+                let lum1 = lumMap[y1 * width + x1]
+                let lum2 = lumMap[y2 * width + x2]
+                // 只抑制两侧都是不透明像素且亮度差小的边缘（花纹）。
+                // 轮廓边缘（一侧透明，lum=0）保留。
+                let bothOpaque = lum1 > 10 && lum2 > 10
+                if bothOpaque && abs(lum1 - lum2) < stripeThreshold {
+                    pixels[i] = 0
+                    pixels[i + 1] = 0
+                    pixels[i + 2] = 0
+                    pixels[i + 3] = 0
+                }
+            }
+        }
+    }
+
+    /// 将眼睛遮罩中的像素标记为实心填充（R=255），alpha=255。
+    /// 这些像素在 encodeSlashLines 中被画为半块实心字符（▀/▄/█）而非斜线。
+    private static func fillEyes(pixels: inout [UInt8], width: Int, height: Int, eyeMask: [Bool]) {
+        let bpp = 4
+        for y in 0..<height {
+            for x in 0..<width {
+                if eyeMask[y * width + x] {
+                    let i = (y * width + x) * bpp
+                    pixels[i] = 255     // R=255 标记为"实心"
+                    pixels[i + 1] = 0
+                    pixels[i + 2] = 0
+                    pixels[i + 3] = 255
                 }
             }
         }

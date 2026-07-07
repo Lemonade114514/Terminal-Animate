@@ -25,6 +25,7 @@ struct CLIOptions {
     var bwEdge: Bool = false
     var edgeThreshold: Int? = nil
     var bwThreshold: Int? = nil
+    var stripeThreshold: Int? = nil
     var mode: Mode = .show
 }
 
@@ -43,6 +44,7 @@ let presetTable = """
   bw                取模黑白白色剪影,     --bw  --bw-threshold 128
   bw-dither         Floyd-Steinberg 抖动黑白, --bw --dither  --bw-threshold 128
   bw-edge           斜线勾边猫,      --bw-edge  --edge-threshold 200
+  bw-edge (眼睛实心+去花纹)         默认 stripe-threshold 250
 """
 
 func parseArgs() -> CLIOptions {
@@ -83,6 +85,9 @@ func parseArgs() -> CLIOptions {
         case "--bw-threshold":
             i += 1
             if i < args.count, let v = Int(args[i]) { opts.bwThreshold = v }
+        case "--stripe-threshold":
+            i += 1
+            if i < args.count, let v = Int(args[i]) { opts.stripeThreshold = v }
         case "--preview-train":
             opts.mode = .previewTrain
         case "--dump-frame":
@@ -98,8 +103,9 @@ func parseArgs() -> CLIOptions {
             print("--filled          画填充月薪喵")
             print("--bw              取模黑白（白色剪影 on 黑底）")
             print("--dither          配合 --bw：Floyd-Steinberg 抖动黑白")
-            print("--bw-edge         斜线勾边猫（/\\|- 按边缘方向画轮廓，内部留空）")
+            print("--bw-edge         斜线勾边猫（/\\|- 画轮廓，眼睛实心，去花纹）")
             print("--edge-threshold  Sobel 边缘阈值（outline 默认 60, bw-edge 默认 200，越小边缘越多）")
+            print("--stripe-threshold 花纹抑制阈值（bw-edge 默认 250，越小去花纹越多）")
             print("--bw-threshold    黑白亮度阈值，默认 128（越小白色越多）")
             print("猫动画高度为终端的 1/2。默认模式 outline（边缘线稿）。")
             print("Ctrl+C 退出。")
@@ -119,6 +125,7 @@ func resolveParams(_ o: CLIOptions) -> RenderParams {
     if o.bwEdge {
         var p = RenderParams.bwEdge
         if let et = o.edgeThreshold { p.edgeThreshold = et }
+        if let st = o.stripeThreshold { p.stripeThreshold = st }
         return p
     }
     if o.bw {
@@ -148,7 +155,7 @@ case .dumpFrame:
     var frames = GifLoader.loadGif(at: url)
     frames = GifLoader.trim(frames)
     guard let first = frames.first else { fputs("no frames\n", stderr); exit(1) }
-    let term = TerminalSize(columns: 100, rows: 40)
+    let term = TerminalSize(columns: 160, rows: 48)
     let src = (first.image.width, first.image.height)
     let target = FrameRenderer.fitSize(source: src, terminal: term, reservedRows: term.rows / 2, verticalPixelsPerRow: 2)
     let resized = FrameRenderer.resize(first.image, to: target)

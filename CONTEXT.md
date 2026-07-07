@@ -90,7 +90,7 @@ _Avoid_: RenderConfig, RenderOptions
 Floyd-Steinberg 抖动黑白模式。把灰度误差按 7/16、3/16、5/16、1/16 扩散到邻居再二值化，保留阴影层次，像 OLED 取模点阵。--bw --dither 旗标组合开启。
 
 **bwEdge**:
-斜线勾边模式。alpha 二值化后 Sobel+NMS 检测边缘，边缘像素在 R 通道存储方向码（0=|, 1=/, 2=-, 3=\），由 encodeSlashLines 按 2:1 像素映射（和半块模式一致）画成白色 /\|- 字符。黑底纯白斜线轮廓，内部留空，像 ASCII 线稿画猫咪。--bw-edge 旗标开启，--edge-threshold 调边缘阈值（默认 200）。encodeSlashLines 每对像素行 (y, y+1) 合并为 1 终端行，任一行有边缘即画斜线。
+斜线勾边模式。alpha 二值化后 Sobel+NMS 检测边缘，边缘像素在 R 通道存储方向码（0=|, 1=/, 2=-, 3=\），由 encodeSlashLines 按 2:1 像素映射（和半块模式一致）画成白色 /\|- 字符。眼睛区域（蓝色像素检测）填充为实心块（█/▀/▄）。花纹（色块边界，亮度差小）被 filterStripeEdges 抑制。--bw-edge 旗标开启，--edge-threshold 调边缘阈值（默认 200），--stripe-threshold 调花纹抑制阈值（默认 30）。encodeSlashLines 每对像素行 (y, y+1) 合并为 1 终端行，任一行有边缘即画斜线，任一行有眼睛即画实心块。
 
 **NMS**:
 Non-Maximum Suppression。Sobel 后的细化步骤：沿梯度方向比较邻居，只保留局部最大幅值的像素，把 2px 宽的边缘带压成 1px。硬边缘（如外轮廓）会因两像素幅值相等触发 tie-break：保留左侧/顶部像素。outline 和 bwEdge 路径都走 NMS。
@@ -109,6 +109,21 @@ _Avoid_: renderToLines, buildOutput
 
 **edgeThreshold**:
 Sobel 边缘阈值，outline 默认 60、bwEdge 默认 200。越小边缘越多。--edge-threshold 旗标覆盖（仅在明确传入时覆盖预设）。
+
+**stripeThreshold**:
+花纹抑制阈值，bwEdge 专用，默认 250。filterStripeEdges 用：两侧不透明像素亮度差低于此值 → 抑制（去花纹）。越小去花纹越多。--stripe-threshold 旗标覆盖。设为 250 可抑制所有内部边缘（白色-浅棕、浅棕-深棕、白色-深棕），只保留轮廓边缘。
+
+**detectEyeMask**:
+眼睛检测。扫描 RGBA 像素，检测蓝色像素（B > R+30 && B > G+10 && alpha > 128），返回 Bool 数组遮罩。用于 bwEdge 模式填充眼睛。
+
+**filterStripeEdges**:
+花纹过滤。bwEdge 专用。对每个边缘像素，沿梯度方向采样原始亮度图两侧亮度，如果两侧都是不透明像素且亮度差 < stripeThreshold，抑制该边缘（alpha=0）。保留轮廓边缘（一侧透明）和眼睛边缘（亮度差大）。
+
+**fillEyes**:
+眼睛填充。bwEdge 专用。对 eyeMask 中的像素，设 R=255（实心标记），alpha=255。encodeSlashLines 识别 R=255 → 画半块实心字符（█/▀/▄）而非斜线。
+
+**Stage.fixedSize**:
+固定终端尺寸 160×48。Stage.enter() 发送 xterm resize 序列 `\x1b[8;48;160t`，所有渲染决策基于此尺寸。
 
 **bwThreshold**:
 黑白亮度阈值，bw / bwDither 模式用，默认 128。越小白色越多。--bw-threshold 旗标覆盖。

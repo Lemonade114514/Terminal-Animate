@@ -17,19 +17,24 @@ final class Stage {
     static let home = "\u{1b}[H"
     static let clearScreen = "\u{1b}[2J"
     static let blackBG = "\u{1b}[48;2;0;0;0m"
+    /// xterm 窗口调整序列：\x1b[8;rows;cols t
+    static let resizeTo160x48 = "\u{1b}[8;48;160t"
 
-    var size: TerminalSize { Stage.readSize() }
+    /// 固定终端尺寸 160×48。
+    static let fixedSize = TerminalSize(columns: 160, rows: 48)
+
+    var size: TerminalSize { Stage.fixedSize }
     private var previousBuffer: [String] = []
 
     init() {}
 
     func enter() {
-        write(Stage.altScreen + Stage.hideCursor + Stage.reset + Stage.blackBG + Stage.clearScreen + Stage.home)
+        write(Stage.altScreen + Stage.hideCursor + Stage.reset + Stage.blackBG + Stage.resizeTo160x48 + Stage.clearScreen + Stage.home)
         fflush(stdout)
     }
 
     func exit() {
-        write(Stage.reset + Stage.defaultBG + Stage.showCursor + Stage.mainScreen)
+        write(Stage.reset + Stage.defaultBG + Stage.showCursor + Stage.clearScreen + Stage.mainScreen)
         fflush(stdout)
     }
 
@@ -58,17 +63,6 @@ final class Stage {
             write(updates.joined())
             fflush(stdout)
         }
-    }
-
-    private static func readSize() -> TerminalSize {
-        var ws = winsize()
-        let err = ioctl(1, TIOCGWINSZ, &ws)
-        if err == 0 && Int(ws.ws_col) > 0 && Int(ws.ws_row) > 0 {
-            return TerminalSize(columns: Int(ws.ws_col), rows: Int(ws.ws_row))
-        }
-        let cols = ProcessInfo.processInfo.environment["COLUMNS"].flatMap(Int.init) ?? 80
-        let rows = ProcessInfo.processInfo.environment["LINES"].flatMap(Int.init) ?? 24
-        return TerminalSize(columns: max(1, cols), rows: max(2, rows))
     }
 
     private func write(_ s: String) {
