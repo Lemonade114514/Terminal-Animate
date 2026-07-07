@@ -73,13 +73,17 @@ final class CatAct: Act {
     private func prerender() {
         cachedSize = stage.size
         guard !gifFrames.isEmpty else { return }
-        // 插帧：每对相邻帧之间插入 2 个插值帧，提升流畅度（25fps → 75fps 等效）
-        let interpolated = GifLoader.interpolateFrames(gifFrames, framesPerOriginal: 2)
-        let src = (interpolated[0].image.width, interpolated[0].image.height)
+        // 1. 先缩放所有帧（240×240 → target），再插值（53×48 像素，快 25 倍）
+        let src = (gifFrames[0].image.width, gifFrames[0].image.height)
         let target = FrameRenderer.fitSize(source: src, terminal: cachedSize, reservedRows: cachedSize.rows / 2, verticalPixelsPerRow: 2)
+        let resizedFrames = gifFrames.map { frame in
+            GifFrame(image: FrameRenderer.resize(frame.image, to: target), duration: frame.duration)
+        }
+        // 2. 在缩放后的图像上插值（~2500 像素/帧 vs ~57600 像素/帧）
+        let interpolated = GifLoader.interpolateFrames(resizedFrames, framesPerOriginal: 2)
+        // 3. 渲染为 ANSI 字符串
         rendered = interpolated.map { frame in
-            let resized = FrameRenderer.resize(frame.image, to: target)
-            let lines = FrameRenderer.render(resized, params: params)
+            let lines = FrameRenderer.render(frame.image, params: params)
             return RenderedFrame(lines: lines, duration: frame.duration)
         }
         frameIndex %= max(1, rendered.count)

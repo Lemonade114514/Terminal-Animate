@@ -2,6 +2,7 @@
 # 用 Xcode 的 xcodebuild 构建项目，输出到 ./build/ 目录。
 # 用法: ./build.sh [Debug|Release]
 set -e
+cd "$(dirname "$0")"
 CONFIG="${1:-Debug}"
 xcodebuild -scheme SalaryTrain \
     -derivedDataPath build \

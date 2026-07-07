@@ -67,7 +67,13 @@ final class Stage {
 
     private func write(_ s: String) {
         s.withCString { ptr in
-            _ = Darwin.write(1, ptr, strlen(ptr))
+            var offset = 0
+            let total = strlen(ptr)
+            while offset < total {
+                let written = Darwin.write(1, ptr.advanced(by: offset), total - offset)
+                if written <= 0 { break }
+                offset += written
+            }
         }
     }
 }
