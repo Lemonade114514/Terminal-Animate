@@ -58,7 +58,7 @@ final class CatAct: Act {
             } else {
                 lines = FrameRenderer.encodeLines(pixels: buf.pixels, width: buf.width, height: buf.height)
             }
-            return RenderedFrame(lines: lines, duration: buf.duration / 2)
+            return RenderedFrame(lines: lines, duration: buf.duration / 2.3)
         }
     }
 
@@ -141,7 +141,7 @@ final class CatAct: Act {
             } else {
                 lines = FrameRenderer.encodeLines(pixels: buf.pixels, width: buf.width, height: buf.height)
             }
-            return RenderedFrame(lines: lines, duration: buf.duration / 2)
+            return RenderedFrame(lines: lines, duration: buf.duration / 2.3)
         }
         frameIndex %= max(1, rendered.count)
     }
