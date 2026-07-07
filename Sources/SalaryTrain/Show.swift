@@ -29,6 +29,7 @@ final class Show {
         defer { stage.exit() }
 
         trainAct.start()
+        catAct.precompute()
         var last = currentTime()
         while sigintFlag == 0 && !trainAct.isFinished {
             let now = currentTime()

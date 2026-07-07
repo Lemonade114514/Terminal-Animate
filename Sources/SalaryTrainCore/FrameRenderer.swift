@@ -211,6 +211,77 @@ public enum FrameRenderer {
         return lines
     }
 
+    /// 在已渲染的像素缓冲之间插入插值帧。
+    /// 对每对相邻帧逐像素 RGBA 线性混合，生成中间帧。
+    /// bwEdge/outline 模式使用边缘感知的插值（先混 alpha 再按阈值二值化），
+    /// 避免方向码混合产生鬼影。
+    /// 返回 (pixels, width, height, duration) 数组，包含原始帧和插值帧。
+    public static func interpolatePixelBuffers(
+        _ buffers: [(pixels: [UInt8], width: Int, height: Int, duration: Double)],
+        framesPerOriginal: Int = 2,
+        mode: RenderMode = .filled
+    ) -> [(pixels: [UInt8], width: Int, height: Int, duration: Double)] {
+        guard buffers.count >= 2 else { return buffers }
+        var result: [(pixels: [UInt8], width: Int, height: Int, duration: Double)] = []
+        let useEdgeBlend = (mode == .bwEdge || mode == .outline)
+        for i in 0..<buffers.count {
+            let cur = buffers[i]
+            let nxt = buffers[(i + 1) % buffers.count]
+            result.append(cur)
+            for k in 1...framesPerOriginal {
+                let t = Double(k) / Double(framesPerOriginal + 1)
+                let blended: [UInt8]
+                if useEdgeBlend {
+                    blended = blendPixelBuffersEdge(cur.pixels, nxt.pixels, ratio: t)
+                } else {
+                    blended = blendPixelBuffers(cur.pixels, nxt.pixels, ratio: t)
+                }
+                let dur = cur.duration / Double(framesPerOriginal + 1)
+                result.append((pixels: blended, width: cur.width, height: cur.height, duration: dur))
+            }
+        }
+        return result
+    }
+
+    private static func blendPixelBuffers(_ a: [UInt8], _ b: [UInt8], ratio t: Double) -> [UInt8] {
+        var out = [UInt8](repeating: 0, count: a.count)
+        let inv = 1.0 - t
+        for i in stride(from: 0, to: a.count, by: 4) {
+            out[i]     = UInt8(inv * Double(a[i])     + t * Double(b[i]))
+            out[i + 1] = UInt8(inv * Double(a[i + 1]) + t * Double(b[i + 1]))
+            out[i + 2] = UInt8(inv * Double(a[i + 2]) + t * Double(b[i + 2]))
+            out[i + 3] = UInt8(inv * Double(a[i + 3]) + t * Double(b[i + 3]))
+        }
+        return out
+    }
+
+    /// 边缘感知像素混合：先混 alpha，再按阈值二值化。
+    /// blended alpha > 128 → 取更近帧的 R/G/B，设 alpha=255
+    /// blended alpha ≤ 128 → 全透明 (0,0,0,0)
+    /// 避免边缘方向码混合产生鬼影 / 错误中间值。
+    private static func blendPixelBuffersEdge(_ a: [UInt8], _ b: [UInt8], ratio t: Double) -> [UInt8] {
+        var out = [UInt8](repeating: 0, count: a.count)
+        let inv = 1.0 - t
+        for i in stride(from: 0, to: a.count, by: 4) {
+            let blendedAlpha = inv * Double(a[i + 3]) + t * Double(b[i + 3])
+            if blendedAlpha > 128.0 {
+                if t < 0.5 {
+                    out[i]     = a[i]
+                    out[i + 1] = a[i + 1]
+                    out[i + 2] = a[i + 2]
+                } else {
+                    out[i]     = b[i]
+                    out[i + 1] = b[i + 1]
+                    out[i + 2] = b[i + 2]
+                }
+                out[i + 3] = 255
+            } else {
+                out[i] = 0; out[i + 1] = 0; out[i + 2] = 0; out[i + 3] = 0
+            }
+        }
+        return out
+    }
+
     /// 斜线编码 seam：2 像素 = 1 终端格（和半块模式一致）。
     /// 按 R 通道存储的方向码画 /\|- 字符。
     /// 方向码：0=|(竖边), 1=/(斜边), 2=-(横边), 3=\(反斜边)。

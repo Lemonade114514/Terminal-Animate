@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TerminalSize {
+public struct TerminalSize: Equatable {
     public var columns: Int
     public var rows: Int
 

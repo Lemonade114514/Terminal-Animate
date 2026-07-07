@@ -11,6 +11,8 @@ final class CatAct: Act {
     private var timeAccum: Double = 0
     private var cachedSize: TerminalSize = TerminalSize(columns: 0, rows: 0)
     private var started = false
+    private var preRenderedFrames: [RenderedFrame]? = nil
+    private var isPrecomputing = false
 
     init(stage: Stage, frames: [GifFrame], params: RenderParams = .bwEdge) {
         self.stage = stage
@@ -20,11 +22,56 @@ final class CatAct: Act {
 
     var isFinished: Bool { false }
 
+    /// 在后台提前预渲染猫动画帧（在小火车阶段调用）。
+    func precompute() {
+        guard !isPrecomputing && preRenderedFrames == nil else { return }
+        isPrecomputing = true
+        let captureFrames = gifFrames
+        let captureParams = params
+        let captureSize = stage.size
+        DispatchQueue.global().async { [weak self] in
+            let frames = CatAct.doPrerender(gifFrames: captureFrames, params: captureParams, size: captureSize)
+            DispatchQueue.main.async {
+                self?.preRenderedFrames = frames
+                self?.isPrecomputing = false
+            }
+        }
+    }
+
+    /// 后台预渲染的逻辑（纯静态函数，无 I/O 依赖）。
+    private static func doPrerender(gifFrames: [GifFrame], params: RenderParams, size: TerminalSize) -> [RenderedFrame] {
+        guard !gifFrames.isEmpty else { return [] }
+        let src = (gifFrames[0].image.width, gifFrames[0].image.height)
+        let target = FrameRenderer.fitSize(source: src, terminal: size, reservedRows: size.rows / 2, verticalPixelsPerRow: 2)
+        let resizedFrames = gifFrames.map { frame in
+            GifFrame(image: FrameRenderer.resize(frame.image, to: target), duration: frame.duration)
+        }
+        let pixelBuffers: [(pixels: [UInt8], width: Int, height: Int, duration: Double)] = resizedFrames.map { frame in
+            let result = FrameRenderer.renderPixels(frame.image, params: params)
+            return (pixels: result.pixels, width: result.width, height: result.height, duration: frame.duration)
+        }
+        let interpolated = FrameRenderer.interpolatePixelBuffers(pixelBuffers, framesPerOriginal: 1, mode: params.mode)
+        return interpolated.map { buf in
+            let lines: [String]
+            if params.mode == .bwEdge {
+                lines = FrameRenderer.encodeSlashLines(pixels: buf.pixels, width: buf.width, height: buf.height)
+            } else {
+                lines = FrameRenderer.encodeLines(pixels: buf.pixels, width: buf.width, height: buf.height)
+            }
+            return RenderedFrame(lines: lines, duration: buf.duration / 2)
+        }
+    }
+
     func start() {
         started = true
         frameIndex = 0
         timeAccum = 0
-        prerender()
+        if let pre = preRenderedFrames, cachedSize == stage.size {
+            rendered = pre
+            preRenderedFrames = nil
+        } else {
+            prerender()
+        }
     }
 
     func step(elapsed: Double) {
@@ -73,18 +120,28 @@ final class CatAct: Act {
     private func prerender() {
         cachedSize = stage.size
         guard !gifFrames.isEmpty else { return }
-        // 1. 先缩放所有帧（240×240 → target），再插值（53×48 像素，快 25 倍）
+        // 1. 缩放所有帧（240×240 → target）
         let src = (gifFrames[0].image.width, gifFrames[0].image.height)
         let target = FrameRenderer.fitSize(source: src, terminal: cachedSize, reservedRows: cachedSize.rows / 2, verticalPixelsPerRow: 2)
         let resizedFrames = gifFrames.map { frame in
             GifFrame(image: FrameRenderer.resize(frame.image, to: target), duration: frame.duration)
         }
-        // 2. 在缩放后的图像上插值（~2500 像素/帧 vs ~57600 像素/帧）
-        let interpolated = GifLoader.interpolateFrames(resizedFrames, framesPerOriginal: 2)
-        // 3. 渲染为 ANSI 字符串
-        rendered = interpolated.map { frame in
-            let lines = FrameRenderer.render(frame.image, params: params)
-            return RenderedFrame(lines: lines, duration: frame.duration)
+        // 2. 先对每帧做像素处理（Sobel/NMS/bw 等），得到 RGBA 像素缓冲
+        let pixelBuffers: [(pixels: [UInt8], width: Int, height: Int, duration: Double)] = resizedFrames.map { frame in
+            let result = FrameRenderer.renderPixels(frame.image, params: params)
+            return (pixels: result.pixels, width: result.width, height: result.height, duration: frame.duration)
+        }
+        // 3. 在已渲染的像素缓冲上插值（边缘检测在干净帧上完成，插值只混合最终像素）
+        let interpolated = FrameRenderer.interpolatePixelBuffers(pixelBuffers, framesPerOriginal: 1, mode: params.mode)
+        // 4. 编码为 ANSI 字符串
+        rendered = interpolated.map { buf in
+            let lines: [String]
+            if params.mode == .bwEdge {
+                lines = FrameRenderer.encodeSlashLines(pixels: buf.pixels, width: buf.width, height: buf.height)
+            } else {
+                lines = FrameRenderer.encodeLines(pixels: buf.pixels, width: buf.width, height: buf.height)
+            }
+            return RenderedFrame(lines: lines, duration: buf.duration / 2)
         }
         frameIndex %= max(1, rendered.count)
     }
