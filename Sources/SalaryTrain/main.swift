@@ -44,7 +44,7 @@ let presetTable = """
   bw                取模黑白白色剪影,     --bw  --bw-threshold 128
   bw-dither         Floyd-Steinberg 抖动黑白, --bw --dither  --bw-threshold 128
   bw-edge           斜线勾边猫,      --bw-edge  --edge-threshold 200
-  bw-edge (眼睛实心+去花纹)         默认 stripe-threshold 250
+  bw-edge (眼睛实心+去花纹)         默认 stripe-threshold 120
 """
 
 func parseArgs() -> CLIOptions {
@@ -105,7 +105,7 @@ func parseArgs() -> CLIOptions {
             print("--dither          配合 --bw：Floyd-Steinberg 抖动黑白")
             print("--bw-edge         斜线勾边猫（/\\|- 画轮廓，眼睛实心，去花纹）")
             print("--edge-threshold  Sobel 边缘阈值（outline 默认 60, bw-edge 默认 200，越小边缘越多）")
-            print("--stripe-threshold 花纹抑制阈值（bw-edge 默认 250，越小去花纹越多）")
+            print("--stripe-threshold 花纹抑制阈值（bw-edge 默认 120，越小去花纹越多）")
             print("--bw-threshold    黑白亮度阈值，默认 128（越小白色越多）")
             print("猫动画高度为终端的 1/2。默认模式 outline（边缘线稿）。")
             print("Ctrl+C 退出。")

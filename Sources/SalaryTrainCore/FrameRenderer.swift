@@ -43,7 +43,7 @@ public struct RenderParams {
     public static let filled    = RenderParams(mode: .filled,    edgeThreshold: 0,   bwThreshold: 0)
     public static let bw        = RenderParams(mode: .bw,        edgeThreshold: 0,   bwThreshold: 128)
     public static let bwDither  = RenderParams(mode: .bwDither,  edgeThreshold: 0,   bwThreshold: 128)
-    public static let bwEdge    = RenderParams(mode: .bwEdge,    edgeThreshold: 200, bwThreshold: 0, stripeThreshold: 100)
+    public static let bwEdge    = RenderParams(mode: .bwEdge,    edgeThreshold: 200, bwThreshold: 0, stripeThreshold: 120)
 }
 
 public enum FrameRenderer {

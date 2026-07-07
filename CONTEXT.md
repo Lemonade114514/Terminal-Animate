@@ -111,7 +111,7 @@ _Avoid_: renderToLines, buildOutput
 Sobel 边缘阈值，outline 默认 60、bwEdge 默认 200。越小边缘越多。--edge-threshold 旗标覆盖（仅在明确传入时覆盖预设）。
 
 **stripeThreshold**:
-花纹抑制阈值，bwEdge 专用，默认 250。filterStripeEdges 用：两侧不透明像素亮度差低于此值 → 抑制（去花纹）。越小去花纹越多。--stripe-threshold 旗标覆盖。设为 250 可抑制所有内部边缘（白色-浅棕、浅棕-深棕、白色-深棕），只保留轮廓边缘。
+花纹抑制阈值，bwEdge 专用，默认 120。filterStripeEdges 用：两侧不透明像素亮度差低于此值 → 抑制（去花纹）。越小去花纹越多。--stripe-threshold 旗标覆盖。设为 120 可抑制白色-浅棕等内部边缘，只保留轮廓边缘。
 
 **detectEyeMask**:
 眼睛检测。扫描 RGBA 像素，检测蓝色像素（B > R+30 && B > G+10 && alpha > 128），返回 Bool 数组遮罩。用于 bwEdge 模式填充眼睛。

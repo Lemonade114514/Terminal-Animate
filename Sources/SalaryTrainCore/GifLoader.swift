@@ -19,7 +19,7 @@ public enum GifLoader {
         for i in 0..<count {
             guard let cg = CGImageSourceCreateImageAtIndex(source, i, nil) else { continue }
             let duration = frameDuration(at: i, source: source)
-            frames.append(GifFrame(image: cg, duration: max(duration, 0.02)))
+            frames.append(GifFrame(image: cg, duration: max(duration, 0.1)))
         }
         if frames.isEmpty {
             fputs("No frames in GIF: \(url.path)\n", stderr)
