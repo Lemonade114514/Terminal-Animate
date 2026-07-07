@@ -11,8 +11,7 @@ let package = Package(
         .executableTarget(
             name: "SalaryTrain",
             dependencies: ["SalaryTrainCore"],
-            path: "Sources/SalaryTrain",
-            exclude: ["cat.gif"]
+            path: "Sources/SalaryTrain"
         ),
         .testTarget(
             name: "SalaryTrainTests",
