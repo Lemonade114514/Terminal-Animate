@@ -20,6 +20,7 @@ struct CLIOptions {
     var speed: Double = 30
     // 月薪喵渲染模式旗标（最后指定的覆盖）。
     var filled: Bool = false
+    var outline: Bool = false
     var bw: Bool = false
     var dither: Bool = false
     var bwEdge: Bool = false
@@ -38,13 +39,12 @@ enum Mode {
 
 /// 月薪喵动画预设参数表（旗标解析后合成一份 RenderParams）。
 let presetTable = """
-月薪喵动画预设参数表（猫高度为终端的 1/2）：
-  outline   (默认) Sobel+NMS 边缘线稿,  --edge-threshold 60
+月薪喵动画预设参数表（默认模式 bw-edge，插帧 2x）：
+  bw-edge   (默认) 斜线勾边猫,  --bw-edge  --edge-threshold 200
+  outline           Sobel+NMS 边缘线稿,  --outline  --edge-threshold 60
   filled            全彩填充,            --filled
   bw                取模黑白白色剪影,     --bw  --bw-threshold 128
   bw-dither         Floyd-Steinberg 抖动黑白, --bw --dither  --bw-threshold 128
-  bw-edge           斜线勾边猫,      --bw-edge  --edge-threshold 200
-  bw-edge (眼睛实心+去花纹)         默认 stripe-threshold 120
 """
 
 func parseArgs() -> CLIOptions {
@@ -65,6 +65,13 @@ func parseArgs() -> CLIOptions {
             opts.bw = false
             opts.dither = false
             opts.bwEdge = false
+            opts.outline = false
+        case "--outline":
+            opts.outline = true
+            opts.filled = false
+            opts.bw = false
+            opts.bwEdge = false
+            opts.dither = false
         case "--bw":
             opts.bw = true
             opts.filled = false
@@ -100,14 +107,15 @@ func parseArgs() -> CLIOptions {
             print("       SalaryTrain --preview-train | --dump-frame | --cat-only")
             print("")
             print(presetTable)
+            print("--outline         Sobel+NMS 边缘线稿（旧默认模式）")
             print("--filled          画填充月薪喵")
             print("--bw              取模黑白（白色剪影 on 黑底）")
             print("--dither          配合 --bw：Floyd-Steinberg 抖动黑白")
-            print("--bw-edge         斜线勾边猫（/\\|- 画轮廓，眼睛实心，去花纹）")
+            print("--bw-edge         斜线勾边猫（默认模式，/\\|- 画轮廓，眼睛实心，去花纹）")
             print("--edge-threshold  Sobel 边缘阈值（outline 默认 60, bw-edge 默认 200，越小边缘越多）")
             print("--stripe-threshold 花纹抑制阈值（bw-edge 默认 120，越小去花纹越多）")
             print("--bw-threshold    黑白亮度阈值，默认 128（越小白色越多）")
-            print("猫动画高度为终端的 1/2。默认模式 outline（边缘线稿）。")
+            print("默认模式 bw-edge（斜线勾边猫，插帧 2x）。")
             print("Ctrl+C 退出。")
             exit(0)
         default:
@@ -138,11 +146,18 @@ func resolveParams(_ o: CLIOptions) -> RenderParams {
         if let bt = o.bwThreshold { p.bwThreshold = bt }
         return p
     }
+    if o.outline {
+        var p = RenderParams.outline
+        if let et = o.edgeThreshold { p.edgeThreshold = et }
+        return p
+    }
     if o.filled {
         return .filled
     }
-    var p = RenderParams.outline
+    // 默认模式：bwEdge（斜线勾边猫）
+    var p = RenderParams.bwEdge
     if let et = o.edgeThreshold { p.edgeThreshold = et }
+    if let st = o.stripeThreshold { p.stripeThreshold = st }
     return p
 }
 

@@ -43,6 +43,45 @@ public enum GifLoader {
         return frames.map { GifFrame(image: cropImage($0.image, to: crop), duration: $0.duration) }
     }
 
+    /// 在相邻帧之间插入插值帧，提升动画流畅度。
+    /// - framesPerOriginal: 每对相邻帧之间插入的插值帧数（例如 2 表示插入 2 帧，总帧数约为原始的 3 倍）
+    public static func interpolateFrames(_ frames: [GifFrame], framesPerOriginal: Int = 2) -> [GifFrame] {
+        guard frames.count >= 2 else { return frames }
+        var result: [GifFrame] = []
+        let cs = CGColorSpaceCreateDeviceRGB()
+        for i in 0..<frames.count {
+            result.append(frames[i])
+            let next = frames[(i + 1) % frames.count]
+            for k in 1...framesPerOriginal {
+                let t = Double(k) / Double(framesPerOriginal + 1)
+                if let blended = blendImages(frames[i].image, next.image, ratio: t, colorSpace: cs) {
+                    let dur = frames[i].duration / Double(framesPerOriginal + 1)
+                    result.append(GifFrame(image: blended, duration: dur))
+                }
+            }
+        }
+        return result
+    }
+
+    private static func blendImages(_ imgA: CGImage, _ imgB: CGImage, ratio t: Double, colorSpace cs: CGColorSpace) -> CGImage? {
+        let w = max(imgA.width, imgB.width)
+        let h = max(imgA.height, imgB.height)
+        guard w > 0, h > 0 else { return nil }
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h,
+            bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        let rect = CGRect(x: 0, y: 0, width: w, height: h)
+        ctx.clear(rect)
+        ctx.setAlpha(CGFloat(1.0 - t))
+        ctx.draw(imgA, in: rect)
+        ctx.setAlpha(CGFloat(t))
+        ctx.setBlendMode(.normal)
+        ctx.draw(imgB, in: rect)
+        return ctx.makeImage()
+    }
+
     private static func frameDuration(at index: Int, source: CGImageSource) -> Double {
         let props = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
         if let gif = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] {

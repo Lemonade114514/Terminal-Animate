@@ -12,7 +12,7 @@ final class CatAct: Act {
     private var cachedSize: TerminalSize = TerminalSize(columns: 0, rows: 0)
     private var started = false
 
-    init(stage: Stage, frames: [GifFrame], params: RenderParams = .outline) {
+    init(stage: Stage, frames: [GifFrame], params: RenderParams = .bwEdge) {
         self.stage = stage
         self.gifFrames = frames
         self.params = params
@@ -73,9 +73,11 @@ final class CatAct: Act {
     private func prerender() {
         cachedSize = stage.size
         guard !gifFrames.isEmpty else { return }
-        let src = (gifFrames[0].image.width, gifFrames[0].image.height)
+        // 插帧：每对相邻帧之间插入 2 个插值帧，提升流畅度（25fps → 75fps 等效）
+        let interpolated = GifLoader.interpolateFrames(gifFrames, framesPerOriginal: 2)
+        let src = (interpolated[0].image.width, interpolated[0].image.height)
         let target = FrameRenderer.fitSize(source: src, terminal: cachedSize, reservedRows: cachedSize.rows / 2, verticalPixelsPerRow: 2)
-        rendered = gifFrames.map { frame in
+        rendered = interpolated.map { frame in
             let resized = FrameRenderer.resize(frame.image, to: target)
             let lines = FrameRenderer.render(resized, params: params)
             return RenderedFrame(lines: lines, duration: frame.duration)
