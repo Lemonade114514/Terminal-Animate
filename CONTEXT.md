@@ -71,12 +71,12 @@ _Avoid_: ScreenFrame, DisplayFrame
 GIF 装载时裁掉帧间透明边距的预处理。
 
 **AssetPath**:
-CatAct 装载 GIF 的路径解析策略，--gif 参数 → CWD → #filePath 源码树 fallback。
+CatAct 装载 GIF 的路径解析策略，--gif 参数 → CWD → #filePath 源码树 → Assets/ 回退。
 
 ## 月薪喵渲染预设
 
 **RenderMode**:
-月薪喵动画的渲染模式枚举：filled（全彩填充）/ outline（Sobel+NMS 边缘线稿）/ bw（取模黑白白色剪影）/ bwDither（Floyd-Steinberg 抖动黑白）/ bwEdge（黑底白线勾边，Sobel+NMS 边缘统一白，内部留空）。SalaryTrainCore 公共类型。
+月薪喵动画的渲染模式枚举：filled（全彩填充）/ outline（Sobel+NMS 边缘线稿）/ bw（取模黑白白色剪影）/ bwDither（Floyd-Steinberg 抖动黑白）/ bwEdge（黑底白线勾边，Sobel+NMS 边缘统一白，内部留空）。公共类型。
 _Avoid_: EdgeMode, RenderStyle
 
 **RenderParams**:

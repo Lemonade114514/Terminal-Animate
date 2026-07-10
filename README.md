@@ -2,18 +2,23 @@
 
 一场终端演出：sl (Steam Locomotive) 蒸汽火车从右向左驶过后，月薪喵 GIF 居中循环播放。
 
-## 运行
+## 版本
 
-```sh
-cd ~/Desktop/Terminal-Animate-main
-swift run -c release                          # 默认模式（bw-edge 斜线勾边猫）
-swift run -c release -- --filled              # 全彩填充
-swift run -c release -- --outline             # Sobel+NMS 边缘线稿
-swift run -c release -- --bw                  # 取模黑白剪影
-swift run -c release -- --bw --dither         # Floyd-Steinberg 抖动黑白
+当前 **v1.1.0** — 迁移至 Xcode 双 Target 工程，新增 Cocoa Launcher，兼容 macOS 10.15+。
+
+## 构建（开发）
+
+在 Xcode 中打开 `SalaryTrain.xcodeproj`，选择 **SalaryTrainApp** scheme → Product → Build (⌘B)。
+
+输出路径：
+```
+~/Library/Developer/Xcode/DerivedData/SalaryTrain-*/Build/Products/Release/SalaryTrainApp.app
 ```
 
-按 `Ctrl+C` 退出。
+终端调试运行：
+```sh
+open Release/SalaryTrainApp.app --args --filled
+```
 
 ## 渲染模式
 
@@ -41,30 +46,55 @@ swift run -c release -- --bw --dither         # Floyd-Steinberg 抖动黑白
 --cat-only            # 只播放猫动画（跳过火车）
 ```
 
+## 分发
+
+`.app` 用 ad-hoc 签名，首次运行需右键 → 打开（绕过 Gatekeeper）。若 Desktop 副本被隔离，去隔离：
+
+```sh
+xattr -cr SalaryTrainApp.app
+```
+
+参数传递：
+```sh
+open SalaryTrainApp.app                       # 默认 bw-edge 模式
+open SalaryTrainApp.app --args --filled       # 全彩填充
+open SalaryTrainApp.app --args --cat-only     # 只播猫
+```
+
+按 `Ctrl+C` 退出。
+
 ## 项目结构
 
 ```
-Terminal-Animate-main/
-├── Package.swift                 # SPM 包定义（库+可执行体+测试）
-├── CONTEXT.md                    # 项目领域词汇表
+Terminal-Animate-App/
+├── SalaryTrain.xcodeproj/         # Xcode 双 Target 工程
+│   ├── project.pbxproj
+│   └── xcshareddata/xcschemes/
+│       ├── SalaryTrain.xcscheme       # CLI Tool target
+│       └── SalaryTrainApp.xcscheme    # .app bundle target
+├── Info.plist
+├── Launcher/
+│   └── main.swift                 # Cocoa 原生启动器（NSApplication + Process/applescript）
 ├── Sources/
-│   ├── SalaryTrainCore/          # 纯逻辑库（无 I/O，可测）
-│   │   ├── FrameRenderer.swift   # 像素处理 + 编码（核心渲染管线）
-│   │   ├── GifLoader.swift       # GIF 解码（ImageIO）+ 裁剪
-│   │   ├── Train.swift           # sl D51 火车 art + 烟雾粒子系统
-│   │   ├── Overlay.swift         # "Quit: Ctrl+C" 恒定提示
-│   │   └── TerminalSize.swift    # 终端尺寸结构体
-│   ├── SalaryTrain/              # I/O 可执行体
-│   │   ├── main.swift            # CLI 解析 + 编排入口
-│   │   ├── Stage.swift           # 终端控制（alt screen, 240×40 固定尺寸, diff draw, 窗口居中）
-│   │   ├── Show.swift            # 演出主循环（火车→猫，猫预渲染）
-│   │   ├── Act.swift             # Act 协议
-│   │   ├── TrainAct.swift        # 火车动画（sl 节奏, 40ms/帧）
-│   │   ├── CatAct.swift          # 猫动画（后台预渲染 + 插值 + 编码）
-│   │   └── AssetPath.swift       # GIF 路径解析
-│   └── SalaryTrainTests/         # 12 个行为测试
-│       ├── FrameRendererTests.swift
-│       └── OverlayTests.swift
+│   ├── SalaryTrain/               # 全部 Swift 源码（单模块编译）
+│   │   ├── main.swift             # CLI 解析 + 编排入口
+│   │   ├── Stage.swift            # 终端控制（alt screen, 240×40, diff draw, 窗口居中）
+│   │   ├── Show.swift             # 演出主循环（火车→猫，猫预渲染）
+│   │   ├── Act.swift              # Act 协议
+│   │   ├── TrainAct.swift         # 火车动画（sl 节奏, 40ms/帧）
+│   │   ├── CatAct.swift           # 猫动画（后台预渲染 + 插值 + 编码）
+│   │   ├── AssetPath.swift        # GIF 路径解析（--gif → CWD → #filePath → Assets/）
+│   │   ├── FrameRenderer.swift    # 像素处理 + 编码（核心渲染管线）
+│   │   ├── GifLoader.swift        # GIF 解码（ImageIO）+ 裁剪
+│   │   ├── Train.swift            # sl D51 火车 art + 烟雾粒子系统
+│   │   ├── Overlay.swift          # "Quit: Ctrl+C" 恒定提示
+│   │   └── TerminalSize.swift     # 终端尺寸结构体
+│   └── SalaryTrainTests/          # 行为测试（SPM 遗留, 未加入 Xcode target）
+├── Assets/
+│   ├── cat.gif                    # 月薪喵 GIF（131K）
+│   └── AppIcon.icns               # 圆角 App 图标
+├── CONTEXT.md                     # 项目领域词汇表
+└── generate_xcodeproj.py          # 一键重新生成 .xcodeproj
 ```
 
 ## 渲染管线
@@ -120,8 +150,10 @@ GIF 文件
 
 ## 技术栈
 
-- **语言**：Swift 6.0
-- **构建**：Swift Package Manager
+- **语言**：Swift 5.0
+- **构建**：Xcode 16（双 Target：SalaryTrain CLI Tool + SalaryTrainApp macOS Application）
 - **图像处理**：CoreGraphics + ImageIO（GIF 解码、缩放、像素提取）
 - **终端控制**：ANSI escape codes + ioctl (TIOCGWINSZ)
-- **测试**：XCTest（12 个行为测试）
+- **启动器**：Cocoa（NSApplication + Process + AppleScript osascript）
+- **测试**：XCTest（SPM 遗留测试，未加入 Xcode target）
+- **兼容**：macOS 10.15+
