@@ -1,5 +1,4 @@
 import Foundation
-import SalaryTrainCore
 final class TrainAct: Act {
     let stage: Stage
 

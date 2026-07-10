@@ -1,5 +1,4 @@
 import Foundation
-import SalaryTrainCore
 
 func previewTrain() {
     let w = D51_LENGTH

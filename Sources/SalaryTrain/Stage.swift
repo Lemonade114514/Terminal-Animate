@@ -1,5 +1,4 @@
 import Foundation
-import SalaryTrainCore
 #if canImport(Glibc)
 import Glibc
 #elseif canImport(Darwin)

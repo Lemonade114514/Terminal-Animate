@@ -1,5 +1,4 @@
 import Foundation
-import SalaryTrainCore
 import CoreGraphics
 
 final class CatAct: Act {

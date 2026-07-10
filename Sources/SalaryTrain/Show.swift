@@ -1,5 +1,4 @@
 import Foundation
-import SalaryTrainCore
 #if canImport(Darwin)
 import Darwin
 #endif
